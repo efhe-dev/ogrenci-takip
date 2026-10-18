@@ -1,0 +1,1334 @@
+<!DOCTYPE html>
+<html lang="tr" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Öğrenci Staj ve Okul Takip Asistanı</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Inter Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+</head>
+<body class="h-full bg-slate-50 text-slate-800 font-sans antialiased flex flex-col">
+
+    <!-- Loading Overlay -->
+    <div id="app-loading" class="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-50 flex flex-col items-center justify-center text-white space-y-4">
+        <div class="w-12 h-12 border-4 border-indigo-400 border-t-transparent rounded-full animate-spin"></div>
+        <p class="text-sm font-medium tracking-wide" id="loading-text">Sistem ve Oturum Yükleniyor...</p>
+    </div>
+
+    <!-- Authentication Modal (Login / Register / Verify Email) -->
+    <div id="auth-modal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-40 flex items-center justify-center p-4 overflow-y-auto hidden">
+        <div class="bg-white rounded-2xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-slate-100 space-y-6 my-8">
+            
+            <!-- Auth Header -->
+            <div class="text-center space-y-2">
+                <div class="w-14 h-14 bg-indigo-100 text-indigo-600 rounded-2xl mx-auto flex items-center justify-center text-2xl shadow-inner">
+                    <i class="fa-solid fa-graduation-cap"></i>
+                </div>
+                <h2 class="text-2xl font-bold text-slate-800" id="auth-title">Öğrenci Takip Sistemi</h2>
+                <p class="text-sm text-slate-500" id="auth-subtitle">Hesabınıza giriş yapın veya yeni bir profil oluşturun.</p>
+            </div>
+
+            <!-- Email Verification Notice (Hidden by default) -->
+            <div id="email-verification-notice" class="hidden bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800 space-y-3">
+                <div class="flex items-start gap-2.5">
+                    <i class="fa-solid fa-envelope-circle-check text-amber-600 text-lg mt-0.5"></i>
+                    <div>
+                        <strong class="font-bold block">E-Posta Doğrulaması Gerekli!</strong>
+                        <p class="text-xs text-amber-700 mt-1">E-posta adresinize (<span id="unverified-email-text" class="font-semibold"></span>) bir doğrulama bağlantısı gönderildi. Lütfen mailinizi kontrol edip onaylayın.</p>
+                    </div>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="resendVerificationEmail()" class="w-full bg-amber-600 hover:bg-amber-700 text-white font-medium py-2 rounded-lg text-xs transition">
+                        Tekrar Onay Maili Gönder
+                    </button>
+                    <button onclick="checkEmailVerified()" class="w-full bg-slate-800 hover:bg-slate-900 text-white font-medium py-2 rounded-lg text-xs transition">
+                        Doğruladım, Kontrol Et
+                    </button>
+                </div>
+            </div>
+
+            <!-- Firebase Setup / Operation Warning (Shown when Email/Password is disabled in Firebase Console) -->
+            <div id="firebase-error-notice" class="hidden bg-rose-50 border border-rose-200 rounded-xl p-4 text-xs text-rose-800 space-y-2">
+                <div class="font-bold flex items-center gap-1.5 text-rose-900">
+                    <i class="fa-solid fa-circle-exclamation text-rose-600 text-sm"></i> Firebase Ayarı Yapılmalı (operation-not-allowed)
+                </div>
+                <p>Firebase Console üzerinde <strong>Email/Password</strong> giriş yöntemi henüz etkinleştirilmemiş.</p>
+                <ol class="list-decimal list-inside space-y-1 text-rose-700 font-medium pt-1">
+                    <li>Firebase Console &gt; Authentication sekmesine gidin.</li>
+                    <li>Sign-in method kısmından <strong>Email/Password</strong> seçeneğini <strong>Etkinleştir (Enable)</strong> yapın.</li>
+                </ol>
+                <div class="pt-2">
+                    <button onclick="enableDemoMode()" class="w-full bg-slate-800 hover:bg-slate-900 text-white font-semibold py-2 rounded-lg transition text-xs flex items-center justify-center gap-1.5">
+                        <i class="fa-solid fa-bolt text-amber-400"></i> Çevrimdışı / Demo Modu İle Devam Et
+                    </button>
+                </div>
+            </div>
+
+            <!-- LOGIN FORM -->
+            <form id="form-login" onsubmit="handleLogin(event)" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">E-Posta Adresi</label>
+                    <input type="email" id="login-email" required placeholder="ogrenci@ornek.com" class="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                </div>
+                <div>
+                    <div class="flex justify-between items-center mb-1">
+                        <label class="block text-xs font-semibold text-slate-600 uppercase">Şifre</label>
+                        <button type="button" onclick="handleForgotPassword()" class="text-xs text-indigo-600 hover:underline">Şifremi Unuttum</button>
+                    </div>
+                    <input type="password" id="login-password" required placeholder="••••••••" class="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                </div>
+                <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-xl transition shadow-lg shadow-indigo-600/20 text-sm flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-right-to-bracket"></i> Giriş Yap
+                </button>
+                <p class="text-center text-xs text-slate-500">
+                    Hesabınız yok mu? <button type="button" onclick="toggleAuthMode('register')" class="text-indigo-600 font-semibold hover:underline">Hemen Kaydolun</button>
+                </p>
+            </form>
+
+            <!-- REGISTER FORM (With Full Profile Registration) -->
+            <form id="form-register" onsubmit="handleRegister(event)" class="space-y-4 hidden">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Adınız *</label>
+                        <input type="text" id="reg-firstname" required placeholder="Ahmet" class="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Soyadınız *</label>
+                        <input type="text" id="reg-lastname" required placeholder="Yılmaz" class="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">E-posta Adresi *</label>
+                    <input type="email" id="reg-email" required placeholder="ogrenci@ornek.com" class="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Şifre * (En az 6 Karakter)</label>
+                    <input type="password" id="reg-password" required minlength="6" placeholder="••••••••" class="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Sınıf *</label>
+                        <select id="reg-class" required class="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white">
+                            <option value="12" selected>12. Sınıf</option>
+                            <option value="11">11. Sınıf</option>
+                            <option value="10">10. Sınıf</option>
+                            <option value="9">9. Sınıf</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Şube *</label>
+                        <input type="text" id="reg-section" required placeholder="Örn: B, A" class="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none uppercase" maxlength="4" value="B">
+                    </div>
+                </div>
+
+                <!-- Days Schedule Customization -->
+                <div class="pt-2">
+                    <label class="block text-xs font-semibold text-slate-600 uppercase mb-2">Okul ve Staj Günleri Tercihi *</label>
+                    <div class="space-y-2 bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-xs">
+                        <label class="flex items-center space-x-3 cursor-pointer">
+                            <input type="radio" name="days-schedule" value="mon_tue" checked class="text-indigo-600 focus:ring-indigo-500">
+                            <span><strong>Pazartesi & Salı:</strong> Okul | <strong>Çar-Per-Cum:</strong> Staj</span>
+                        </label>
+                        <label class="flex items-center space-x-3 cursor-pointer">
+                            <input type="radio" name="days-schedule" value="thu_fri" class="text-indigo-600 focus:ring-indigo-500">
+                            <span><strong>Perşembe & Cuma:</strong> Okul | <strong>Pzt-Sal-Çar:</strong> Staj</span>
+                        </label>
+                        <label class="flex items-center space-x-3 cursor-pointer">
+                            <input type="radio" name="days-schedule" value="school_only" class="text-indigo-600 focus:ring-indigo-500">
+                            <span><strong>Hafta İçi Her Gün:</strong> Sadece Okul (Staj Yok)</span>
+                        </label>
+                    </div>
+                </div>
+
+                <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-xl transition shadow-lg shadow-indigo-600/20 text-sm flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-user-plus"></i> Kaydol ve Doğrulama Maili Gönder
+                </button>
+                <p class="text-center text-xs text-slate-500">
+                    Zaten hesabınız var mı? <button type="button" onclick="toggleAuthMode('login')" class="text-indigo-600 font-semibold hover:underline">Giriş Yapın</button>
+                </p>
+            </form>
+        </div>
+    </div>
+
+    <!-- Main Application Header -->
+    <header class="bg-indigo-600 text-white shadow-md sticky top-0 z-30">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="bg-indigo-700 p-2.5 rounded-xl shadow-inner flex items-center justify-center">
+                    <i class="fa-solid fa-graduation-cap text-xl text-indigo-200"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-lg leading-tight flex items-center gap-2">
+                        <span id="header-user-title">Takip Asistanı</span>
+                        <span id="header-class-badge" class="bg-indigo-500 text-xs px-2 py-0.5 rounded-full font-medium">--</span>
+                    </h1>
+                    <p id="header-user-email" class="text-xs text-indigo-200">Kişisel Yönetim Paneli</p>
+                </div>
+            </div>
+            <div class="flex items-center space-x-1 sm:space-x-3">
+                <button onclick="switchTab('dashboard')" id="nav-dashboard" class="px-3 py-1.5 rounded-lg text-sm font-medium bg-indigo-700 text-white transition hover:bg-indigo-500 flex items-center gap-1.5">
+                    <i class="fa-solid fa-chart-pie"></i> <span class="hidden sm:inline">Özet</span>
+                </button>
+                <button onclick="switchTab('calendar')" id="nav-calendar" class="px-3 py-1.5 rounded-lg text-sm font-medium text-indigo-100 hover:bg-indigo-500 transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-calendar-days"></i> <span class="hidden sm:inline">Takvim</span>
+                </button>
+                <button onclick="switchTab('attendance')" id="nav-attendance" class="px-3 py-1.5 rounded-lg text-sm font-medium text-indigo-100 hover:bg-indigo-500 transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-user-clock"></i> <span class="hidden sm:inline">Devamsızlık</span>
+                </button>
+                <button onclick="switchTab('schedule')" id="nav-schedule" class="px-3 py-1.5 rounded-lg text-sm font-medium text-indigo-100 hover:bg-indigo-500 transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-clock"></i> <span class="hidden sm:inline">Program</span>
+                </button>
+                <button onclick="handleLogout()" title="Oturumu Kapat" class="p-2 rounded-lg text-indigo-200 hover:text-white hover:bg-indigo-700 transition ml-2">
+                    <i class="fa-solid fa-right-from-bracket text-lg"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 overflow-y-auto">
+
+        <!-- DASHBOARD VIEW -->
+        <div id="view-dashboard" class="space-y-6">
+            <!-- Welcome Banner -->
+            <div class="bg-gradient-to-r from-indigo-500 to-violet-600 rounded-2xl p-6 text-white shadow-lg flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div>
+                    <h2 class="text-2xl font-bold flex items-center gap-2">
+                        <span>Hoş geldin, <span id="dash-user-fullname">Öğrenci</span>!</span> 🚀
+                    </h2>
+                    <p class="text-indigo-100 text-sm mt-1" id="dash-schedule-summary">Staj ve okul günlerin seçtiğin programa göre özel olarak hesaplanıyor.</p>
+                </div>
+                <div class="flex items-center gap-3 bg-white/10 backdrop-blur-md px-4 py-2.5 rounded-xl border border-white/20">
+                    <i class="fa-solid fa-calendar-check text-indigo-200 text-lg"></i>
+                    <div>
+                        <div class="text-xs text-indigo-200">Bugünün Durumu</div>
+                        <div id="today-status-badge" class="font-semibold text-sm">Hesaplanıyor...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Countdown Cards Grid -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <!-- Okulun Kapanması -->
+                <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 flex items-center gap-4">
+                    <div class="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-xl font-bold">
+                        <i class="fa-solid fa-flag-checkered"></i>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500 font-medium">Okulun Kapanmasına</div>
+                        <div class="text-2xl font-bold text-slate-800" id="countdown-school-end">-- Gün</div>
+                        <div class="text-xs text-amber-600 font-medium mt-0.5">25 Haziran 2027</div>
+                    </div>
+                </div>
+
+                <!-- Sıradaki Tatil -->
+                <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 flex items-center gap-4">
+                    <div class="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl font-bold">
+                        <i class="fa-solid fa-umbrella-beach"></i>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500 font-medium" id="next-holiday-label">Sıradaki Tatil</div>
+                        <div class="text-2xl font-bold text-slate-800" id="countdown-next-holiday">-- Gün</div>
+                        <div class="text-xs text-emerald-600 font-medium mt-0.5" id="next-holiday-name">Yükleniyor...</div>
+                    </div>
+                </div>
+
+                <!-- Kalan Okul Günü -->
+                <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 flex items-center gap-4">
+                    <div class="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-xl font-bold">
+                        <i class="fa-solid fa-school"></i>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500 font-medium">Kalan Okul Günü</div>
+                        <div class="text-2xl font-bold text-slate-800" id="stat-school-days">--</div>
+                        <div class="text-xs text-blue-600 font-medium mt-0.5" id="stat-school-days-sub">Tatiller Hariç</div>
+                    </div>
+                </div>
+
+                <!-- Kalan Staj Günü -->
+                <div class="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 flex items-center gap-4">
+                    <div class="w-12 h-12 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center text-xl font-bold">
+                        <i class="fa-solid fa-briefcase"></i>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500 font-medium">Kalan Staj Günü</div>
+                        <div class="text-2xl font-bold text-slate-800" id="stat-staj-days">--</div>
+                        <div class="text-xs text-purple-600 font-medium mt-0.5" id="stat-staj-days-sub">Staj Günlerin</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Devamsızlık Özet & Hızlı Güncelleme -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Devamsızlık Durumu Kartı -->
+                <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 lg:col-span-2 flex flex-col justify-between">
+                    <div>
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="font-bold text-lg text-slate-800 flex items-center gap-2">
+                                <i class="fa-solid fa-triangle-exclamation text-amber-500"></i> Devamsızlık Sınırı Durumu
+                            </h3>
+                            <button onclick="switchTab('attendance')" class="text-xs text-indigo-600 hover:text-indigo-800 font-semibold">Düzenle <i class="fa-solid fa-arrow-right ml-1"></i></button>
+                        </div>
+                        <p class="text-sm text-slate-500 mb-6">MEB yönetmeliğine göre özürsüz devamsızlık sınırı 10 gün, özürlü 20 gün, toplam 30 gündür.</p>
+                        
+                        <!-- Progress Bars -->
+                        <div class="space-y-4">
+                            <!-- Özürsüz -->
+                            <div>
+                                <div class="flex justify-between text-sm mb-1 font-medium">
+                                    <span class="text-slate-700">Özürsüz Devamsızlık</span>
+                                    <span id="summary-ozursuz-text">0 / 10 Gün</span>
+                                </div>
+                                <div class="w-full bg-slate-100 h-3 rounded-full overflow-hidden">
+                                    <div id="bar-ozursuz" class="bg-rose-500 h-full rounded-full transition-all duration-500" style="width: 0%;"></div>
+                                </div>
+                            </div>
+                            <!-- Özürlü -->
+                            <div>
+                                <div class="flex justify-between text-sm mb-1 font-medium">
+                                    <span class="text-slate-700">Özürlü Devamsızlık</span>
+                                    <span id="summary-ozurlu-text">0 / 20 Gün</span>
+                                </div>
+                                <div class="w-full bg-slate-100 h-3 rounded-full overflow-hidden">
+                                    <div id="bar-ozurlu" class="bg-amber-500 h-full rounded-full transition-all duration-500" style="width: 0%;"></div>
+                                </div>
+                            </div>
+                            <!-- Toplam -->
+                            <div>
+                                <div class="flex justify-between text-sm mb-1 font-medium">
+                                    <span class="text-slate-700">Toplam Devamsızlık (Max 30)</span>
+                                    <span id="summary-toplam-text">0 / 30 Gün</span>
+                                </div>
+                                <div class="w-full bg-slate-100 h-3 rounded-full overflow-hidden">
+                                    <div id="bar-toplam" class="bg-indigo-600 h-full rounded-full transition-all duration-500" style="width: 0%;"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div id="attendance-warning-box" class="mt-6 p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm flex items-center gap-3">
+                        <i class="fa-solid fa-circle-check text-lg"></i>
+                        <div id="attendance-warning-text">Devamsızlık durumunuz çok iyi! Sınırların oldukça altındasınız.</div>
+                    </div>
+                </div>
+
+                <!-- Günlük Notlar / Yaklaşan Etkinlikler -->
+                <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 flex flex-col">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="font-bold text-lg text-slate-800 flex items-center gap-2">
+                            <i class="fa-solid fa-note-sticky text-indigo-500"></i> Notlar & Etkinlikler
+                        </h3>
+                        <span id="event-count-badge" class="bg-indigo-100 text-indigo-700 text-xs px-2 py-0.5 rounded-full font-semibold">0 Etkinlik</span>
+                    </div>
+                    <div id="dashboard-events-list" class="flex-1 overflow-y-auto space-y-3 max-h-[250px] pr-1">
+                        <div class="text-center py-8 text-slate-400 text-sm">
+                            <i class="fa-regular fa-calendar-xmark text-3xl mb-2 block"></i>
+                            Kayıtlı etkinlik veya not bulunmuyor.<br>Takvimden gün seçerek ekleyebilirsin.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- CALENDAR VIEW -->
+        <div id="view-calendar" class="space-y-6 hidden">
+            <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
+                <!-- Calendar Header -->
+                <div class="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
+                    <div class="flex items-center space-x-4">
+                        <h2 id="calendar-month-year" class="text-xl font-bold text-slate-800">Ekim 2026</h2>
+                        <div class="flex space-x-1">
+                            <button onclick="changeMonth(-1)" class="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition text-slate-600"><i class="fa-solid fa-chevron-left"></i></button>
+                            <button onclick="goToCurrentMonth()" class="px-3 py-1 rounded-lg border border-slate-200 hover:bg-slate-50 transition text-xs font-semibold text-slate-600">Bugün</button>
+                            <button onclick="changeMonth(1)" class="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition text-slate-600"><i class="fa-solid fa-chevron-right"></i></button>
+                        </div>
+                    </div>
+                    <!-- Legend -->
+                    <div class="flex flex-wrap items-center gap-3 text-xs">
+                        <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-blue-500 inline-block"></span> Okul Günü</span>
+                        <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-purple-500 inline-block"></span> Staj Günü</span>
+                        <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-rose-500 inline-block"></span> Resmi Tatil</span>
+                        <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-emerald-500 inline-block"></span> Ara Tatil / Sömestr</span>
+                    </div>
+                </div>
+
+                <!-- Days of Week -->
+                <div class="grid grid-cols-7 gap-2 mb-2 text-center text-xs font-semibold text-slate-400">
+                    <div>Pzt</div><div>Sal</div><div>Çar</div><div>Per</div><div>Cum</div><div>Cmt</div><div>Paz</div>
+                </div>
+
+                <!-- Calendar Grid -->
+                <div id="calendar-grid" class="grid grid-cols-7 gap-2">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+        </div>
+
+        <!-- ATTENDANCE VIEW -->
+        <div id="view-attendance" class="space-y-6 hidden">
+            <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 max-w-2xl mx-auto">
+                <h2 class="text-xl font-bold text-slate-800 mb-2 flex items-center gap-2">
+                    <i class="fa-solid fa-user-clock text-indigo-600"></i> Devamsızlık Yönetimi
+                </h2>
+                <p class="text-slate-500 text-sm mb-6">Mevcut devamsızlık günlerinizi buraya girerek kalan haklarınızı anlık olarak takip edin.</p>
+
+                <div class="space-y-6">
+                    <!-- Özürsüz Devamsızlık Girişi -->
+                    <div class="p-4 rounded-xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                        <div>
+                            <label class="font-bold text-slate-700 block">Özürsüz Devamsızlık</label>
+                            <span class="text-xs text-slate-500">Maksimum sınır 10 gündür. 10 günü aşarsa sınıf tekrarı riski oluşur.</span>
+                        </div>
+                        <div class="flex items-center gap-3 w-full sm:w-auto">
+                            <input type="number" id="input-ozursuz" min="0" max="10" value="0" onchange="updateAttendanceData()" class="w-20 px-3 py-2 border border-slate-300 rounded-lg text-center font-bold text-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <span class="text-slate-500 font-medium">/ 10 Gün</span>
+                        </div>
+                    </div>
+
+                    <!-- Özürlü Devamsızlık Girişi -->
+                    <div class="p-4 rounded-xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                        <div>
+                            <label class="font-bold text-slate-700 block">Özürlü Devamsızlık</label>
+                            <span class="text-xs text-slate-500">Maksimum sınır 20 gündür (Raporlu / İzinli).</span>
+                        </div>
+                        <div class="flex items-center gap-3 w-full sm:w-auto">
+                            <input type="number" id="input-ozurlu" min="0" max="20" value="0" onchange="updateAttendanceData()" class="w-20 px-3 py-2 border border-slate-300 rounded-lg text-center font-bold text-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <span class="text-slate-500 font-medium">/ 20 Gün</span>
+                        </div>
+                    </div>
+
+                    <!-- Toplam Devamsızlık Göstergesi -->
+                    <div class="p-5 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-between">
+                        <div>
+                            <div class="text-sm font-medium text-indigo-700">Toplam Devamsızlık</div>
+                            <div class="text-xs text-indigo-500">Özürlü + Özürsüz (Genel Sınır: 30 Gün)</div>
+                        </div>
+                        <div class="text-2xl font-bold text-indigo-900" id="display-toplam-devamsizlik">0 / 30 Gün</div>
+                    </div>
+
+                    <!-- Save confirmation -->
+                    <div class="flex justify-end">
+                        <button onclick="saveAttendanceSettings()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-6 py-2.5 rounded-xl transition flex items-center gap-2 shadow-sm">
+                            <i class="fa-solid fa-floppy-disk"></i> Değişiklikleri Kaydet
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SCHEDULE VIEW -->
+        <div id="view-schedule" class="space-y-6 hidden">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Okul ve Staj Saatleri -->
+                <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
+                    <h3 class="font-bold text-lg text-slate-800 mb-4 flex items-center gap-2">
+                        <i class="fa-solid fa-business-time text-indigo-600"></i> Kişisel Haftalık Programın
+                    </h3>
+                    <div id="schedule-list-container" class="space-y-3">
+                        <!-- Dynamic schedule items -->
+                    </div>
+                </div>
+
+                <!-- MEB Resmi Tatiller & Ara Tatiller -->
+                <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
+                    <h3 class="font-bold text-lg text-slate-800 mb-4 flex items-center gap-2">
+                        <i class="fa-solid fa-calendar-star text-indigo-600"></i> MEB 2026-2027 Tatil Takvimi
+                    </h3>
+                    <div class="space-y-3 text-sm">
+                        <div class="p-3 rounded-xl border border-slate-100 flex justify-between items-center bg-slate-50">
+                            <div>
+                                <span class="font-bold text-slate-800 block">1. Dönem Ara Tatili</span>
+                                <span class="text-xs text-slate-500">16 - 20 Kasım 2026</span>
+                            </div>
+                            <span class="bg-emerald-100 text-emerald-800 text-xs px-2 py-0.5 rounded font-medium">1 Hafta</span>
+                        </div>
+                        <div class="p-3 rounded-xl border border-slate-100 flex justify-between items-center bg-slate-50">
+                            <div>
+                                <span class="font-bold text-slate-800 block">Yarıyıl (Sömestr) Tatili</span>
+                                <span class="text-xs text-slate-500">25 Ocak - 5 Şubat 2027</span>
+                            </div>
+                            <span class="bg-emerald-100 text-emerald-800 text-xs px-2 py-0.5 rounded font-medium">2 Hafta</span>
+                        </div>
+                        <div class="p-3 rounded-xl border border-slate-100 flex justify-between items-center bg-slate-50">
+                            <div>
+                                <span class="font-bold text-slate-800 block">2. Dönem Ara Tatili</span>
+                                <span class="text-xs text-slate-500">8 - 12 Mart 2027</span>
+                            </div>
+                            <span class="bg-emerald-100 text-emerald-800 text-xs px-2 py-0.5 rounded font-medium">1 Hafta</span>
+                        </div>
+                        <div class="p-3 rounded-xl border border-slate-100 flex justify-between items-center bg-slate-50">
+                            <div>
+                                <span class="font-bold text-slate-800 block">23 Nisan Çocuk Bayramı</span>
+                                <span class="text-xs text-slate-500">23 Nisan 2027</span>
+                            </div>
+                            <span class="bg-rose-100 text-rose-800 text-xs px-2 py-0.5 rounded font-medium">1 Gün</span>
+                        </div>
+                        <div class="p-3 rounded-xl border border-slate-100 flex justify-between items-center bg-slate-50">
+                            <div>
+                                <span class="font-bold text-slate-800 block">19 Mayıs Gençlik ve Spor Bayramı</span>
+                                <span class="text-xs text-slate-500">19 Mayıs 2027</span>
+                            </div>
+                            <span class="bg-rose-100 text-rose-800 text-xs px-2 py-0.5 rounded font-medium">1 Gün</span>
+                        </div>
+                        <div class="p-3 rounded-xl border border-indigo-100 flex justify-between items-center bg-indigo-50/50">
+                            <div>
+                                <span class="font-bold text-indigo-900 block">Okulların Kapanışı (Yaz Tatili)</span>
+                                <span class="text-xs text-indigo-700">25 Haziran 2027 Cuma</span>
+                            </div>
+                            <span class="bg-indigo-100 text-indigo-800 text-xs px-2 py-0.5 rounded font-medium">Bitiş</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Day Detail & Note Add Modal -->
+    <div id="day-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-100 space-y-4">
+            <div class="flex justify-between items-center">
+                <h3 id="modal-date-title" class="font-bold text-lg text-slate-800">Gün Detayı</h3>
+                <button onclick="closeDayModal()" class="text-slate-400 hover:text-slate-600 text-lg"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            
+            <div id="modal-status-info" class="p-3 rounded-xl bg-slate-50 border border-slate-200 text-sm">
+                <!-- Status badge info -->
+            </div>
+
+            <!-- Event Adding Section -->
+            <div class="space-y-3">
+                <label class="block text-sm font-semibold text-slate-700">Bu Güne Etkinlik / Not Ekle</label>
+                <input type="text" id="modal-event-input" placeholder="Örn: Staj dosyası teslimi / Sınav var" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <button onclick="saveDayEvent()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 rounded-lg transition text-sm flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-plus"></i> Etkinliği Kaydet
+                </button>
+            </div>
+
+            <!-- Existing Events for this day -->
+            <div id="modal-events-container" class="space-y-2 mt-4">
+                <!-- List -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-6 right-6 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-lg transform translate-y-20 opacity-0 transition-all duration-300 z-50 text-sm flex items-center gap-3">
+        <i class="fa-solid fa-circle-check text-emerald-400 text-lg" id="toast-icon"></i>
+        <span id="toast-message">İşlem başarılı</span>
+    </div>
+
+    <!-- Firebase SDK Modules -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { 
+            getAuth, 
+            createUserWithEmailAndPassword, 
+            signInWithEmailAndPassword, 
+            sendEmailVerification, 
+            sendPasswordResetEmail,
+            signOut, 
+            onAuthStateChanged 
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // App & Config Initializations
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'student-tracker-app';
+        
+        // Görseldeki kendi Firebase konfigürasyon bilgilerin buraya eklendi:
+        const firebaseConfig = {
+            apiKey: "AIzaSyCzRzbnjnRauAwtNeGqJLFN6RYuMWrEg",
+            authDomain: "okul-staj.firebaseapp.com",
+            projectId: "okul-staj",
+            storageBucket: "okul-staj.firebasestorage.app",
+            messagingSenderId: "795278972533",
+            appId: "1:795278972533:web:d43618bd40ac9321fe0a3c"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        let currentUser = null;
+        let userId = null;
+
+        // Global State
+        window.currentTab = 'dashboard';
+        window.currentDate = new Date();
+        window.appData = {
+            profile: null,
+            ozursuz: 0,
+            ozurlu: 0,
+            events: {}
+        };
+
+        // MEB Official Holidays & Breaks (2026-2027 Academic Year)
+        const mebHolidays = [
+            { start: '2026-10-29', end: '2026-10-29', name: 'Cumhuriyet Bayramı' },
+            { start: '2026-11-16', end: '2026-11-20', name: '1. Dönem Ara Tatili' },
+            { start: '2027-01-01', end: '2027-01-01', name: 'Yılbaşı' },
+            { start: '2027-01-25', end: '2027-02-05', name: 'Sömestr Tatili' },
+            { start: '2027-03-08', end: '2027-03-12', name: '2. Dönem Ara Tatili' },
+            { start: '2027-04-23', end: '2027-04-23', name: '23 Nisan Ulusal Egemenlik' },
+            { start: '2027-05-19', end: '2027-05-19', name: '19 Mayıs Gençlik ve Spor' }
+        ];
+
+        const schoolEndDate = new Date('2027-06-25');
+
+        // Auth Listener
+        onAuthStateChanged(auth, async (user) => {
+            document.getElementById('app-loading').classList.add('hidden');
+            if (user) {
+                currentUser = user;
+                userId = user.uid;
+
+                // Check Email Verification
+                if (!user.emailVerified) {
+                    document.getElementById('auth-modal').classList.remove('hidden');
+                    document.getElementById('email-verification-notice').classList.remove('hidden');
+                    document.getElementById('unverified-email-text').innerText = user.email;
+                    document.getElementById('form-login').classList.add('hidden');
+                    document.getElementById('form-register').classList.add('hidden');
+                    return;
+                }
+
+                // E-mail verified -> Hide modal & load data
+                document.getElementById('auth-modal').classList.add('hidden');
+                document.getElementById('email-verification-notice').classList.add('hidden');
+                await loadUserData();
+            } else {
+                currentUser = null;
+                userId = null;
+                document.getElementById('auth-modal').classList.remove('hidden');
+                toggleAuthMode('login');
+            }
+        });
+
+        // Toggle Auth View Modes
+        window.toggleAuthMode = function(mode) {
+            document.getElementById('email-verification-notice').classList.add('hidden');
+            if (mode === 'register') {
+                document.getElementById('auth-title').innerText = "Yeni Hesap Oluştur";
+                document.getElementById('auth-subtitle').innerText = "Sınıf ve staj tercihlerinizi girerek kaydolun.";
+                document.getElementById('form-login').classList.add('hidden');
+                document.getElementById('form-register').classList.remove('hidden');
+            } else {
+                document.getElementById('auth-title').innerText = "Giriş Yap";
+                document.getElementById('auth-subtitle').innerText = "Hesabınıza giriş yaparak bilgilerinize erişin.";
+                document.getElementById('form-register').classList.add('hidden');
+                document.getElementById('form-login').classList.remove('hidden');
+            }
+        };
+
+        // Handle Login
+        window.handleLogin = async function(e) {
+            e.preventDefault();
+            const email = document.getElementById('login-email').value.trim();
+            const password = document.getElementById('login-password').value;
+
+            try {
+                showLoading("Giriş yapılıyor...");
+                await signInWithEmailAndPassword(auth, email, password);
+                showToast("Giriş başarılı!");
+            } catch (err) {
+                hideLoading();
+                console.error("Login error:", err);
+                let msg = "Giriş başarısız. Lütfen bilgilerinizi kontrol edin.";
+                if (err.code === 'auth/user-not-found') msg = "Bu e-posta adresi ile kayıtlı kullanıcı bulunamadı.";
+                if (err.code === 'auth/wrong-password') msg = "Hatalı şifre girdiniz.";
+                showToast(msg, 'error');
+            }
+        };
+
+        // Handle Registration
+        window.handleRegister = async function(e) {
+            e.preventDefault();
+            const firstName = document.getElementById('reg-firstname').value.trim();
+            const lastName = document.getElementById('reg-lastname').value.trim();
+            const email = document.getElementById('reg-email').value.trim();
+            const password = document.getElementById('reg-password').value;
+            const classNum = document.getElementById('reg-class').value;
+            const section = document.getElementById('reg-section').value.trim().toUpperCase();
+            
+            const selectedRadio = document.querySelector('input[name="days-schedule"]:checked');
+            const scheduleType = selectedRadio ? selectedRadio.value : 'mon_tue';
+
+            try {
+                showLoading("Hesabınız ve profiliniz oluşturuluyor...");
+                
+                // Create auth user
+                const userCred = await createUserWithEmailAndPassword(auth, email, password);
+                const newUser = userCred.user;
+
+                // Send email verification
+                await sendEmailVerification(newUser);
+
+                // Save initial profile data to Firestore
+                const initialProfile = {
+                    profile: { firstName, lastName, email, classNum, section, scheduleType },
+                    ozursuz: 0,
+                    ozurlu: 0,
+                    events: {}
+                };
+
+                const userDocRef = doc(db, 'artifacts', appId, 'users', newUser.uid, 'userData', 'profile');
+                await setDoc(userDocRef, initialProfile);
+
+                hideLoading();
+                showToast("Kayıt başarılı! Lütfen mailinize gelen onay bağlantısını tıklayın.");
+            } catch (err) {
+                hideLoading();
+                console.error("Register error:", err);
+                let msg = "Kayıt oluşturulamadı.";
+                if (err.code === 'auth/operation-not-allowed') {
+                    document.getElementById('firebase-error-notice').classList.remove('hidden');
+                    msg = "Firebase Console'da E-Posta/Şifre ile giriş yöntemi kapalı. Lütfen yukarıdaki yönlendirmeyi inceleyin.";
+                } else if (err.code === 'auth/email-already-in-use') {
+                    msg = "Bu e-posta adresi zaten kullanımda.";
+                } else if (err.code === 'auth/weak-password') {
+                    msg = "Şifreniz en az 6 karakter olmalıdır.";
+                }
+                showToast(msg, 'error');
+            }
+        };
+
+        // Demo / Local Mode fallback for testing when Firebase configuration is missing
+        window.enableDemoMode = function() {
+            document.getElementById('firebase-error-notice').classList.add('hidden');
+            document.getElementById('auth-modal').classList.add('hidden');
+            
+            window.appData = {
+                profile: {
+                    firstName: "Öğrenci",
+                    lastName: "Demo",
+                    email: "demo@ogrenci.com",
+                    classNum: "12",
+                    section: "B",
+                    scheduleType: "mon_tue"
+                },
+                ozursuz: 2,
+                ozurlu: 0,
+                events: {}
+            };
+            
+            applyUserProfile();
+            showToast("Demo Modu Etkinleştirildi. Verileriniz yerel hafızada saklanacak.");
+        };
+
+        // Resend Verification Email
+        window.resendVerificationEmail = async function() {
+            if (currentUser) {
+                try {
+                    await sendEmailVerification(currentUser);
+                    showToast("Doğrulama maili tekrar gönderildi!");
+                } catch (err) {
+                    showToast("Mail gönderilemedi, lütfen biraz bekleyin.", 'error');
+                }
+            }
+        };
+
+        // Check if Email Verified
+        window.checkEmailVerified = async function() {
+            if (currentUser) {
+                await currentUser.reload();
+                if (currentUser.emailVerified) {
+                    document.getElementById('email-verification-notice').classList.add('hidden');
+                    document.getElementById('auth-modal').classList.add('hidden');
+                    await loadUserData();
+                    showToast("E-posta adresiniz doğrulandı!");
+                } else {
+                    showToast("E-posta adresi henüz doğrulanmamış.", 'error');
+                }
+            }
+        };
+
+        // Forgot Password
+        window.handleForgotPassword = async function() {
+            const email = prompt("Lütfen şifre sıfırlama bağlantısı gönderilecek E-Posta adresinizi girin:");
+            if (email && email.trim()) {
+                try {
+                    await sendPasswordResetEmail(auth, email.trim());
+                    showToast("Şifre sıfırlama bağlantısı e-posta adresinize gönderildi.");
+                } catch (err) {
+                    showToast("E-posta gönderilemedi. Adresi kontrol edin.", 'error');
+                }
+            }
+        };
+
+        // Logout
+        window.handleLogout = async function() {
+            try {
+                await signOut(auth);
+                showToast("Oturum kapatıldı.");
+            } catch (err) {
+                console.error(err);
+            }
+        };
+
+        async function loadUserData() {
+            if (!userId) return;
+            try {
+                showLoading("Verileriniz senkronize ediliyor...");
+                const userDocRef = doc(db, 'artifacts', appId, 'users', userId, 'userData', 'profile');
+                const docSnap = await getDoc(userDocRef);
+
+                if (docSnap.exists()) {
+                    window.appData = docSnap.data();
+                    applyUserProfile();
+                } else {
+                    showToast("Profil veriniz bulunamadı.", "error");
+                }
+            } catch (e) {
+                console.error("Error loading user data:", e);
+            } finally {
+                hideLoading();
+            }
+        }
+
+        async function saveUserData() {
+            if (!userId) return;
+            try {
+                const userDocRef = doc(db, 'artifacts', appId, 'users', userId, 'userData', 'profile');
+                await setDoc(userDocRef, window.appData);
+            } catch (e) {
+                console.error("Error saving user data:", e);
+            }
+        }
+
+        // Apply profile & Refresh UI
+        function applyUserProfile() {
+            const prof = window.appData.profile;
+            if (!prof) return;
+
+            // Update Header
+            document.getElementById('header-user-title').innerText = `${prof.firstName} ${prof.lastName}`;
+            document.getElementById('header-class-badge').innerText = `${prof.classNum}/${prof.section}`;
+            document.getElementById('header-user-email').innerText = prof.email;
+
+            // Update Dashboard Welcome
+            document.getElementById('dash-user-fullname').innerText = `${prof.firstName} ${prof.lastName}`;
+            
+            let schedDesc = "";
+            if (prof.scheduleType === 'mon_tue') schedDesc = "Pazartesi ve Salı okul, Çarşamba-Cuma staj günlerin hesaplanıyor.";
+            else if (prof.scheduleType === 'thu_fri') schedDesc = "Perşembe ve Cuma okul, Pazartesi-Çarşamba staj günlerin hesaplanıyor.";
+            else schedDesc = "Hafta içi tüm günlerin okul olarak hesaplanıyor.";
+            document.getElementById('dash-schedule-summary').innerText = schedDesc;
+
+            // Sync Inputs
+            document.getElementById('input-ozursuz').value = window.appData.ozursuz || 0;
+            document.getElementById('input-ozurlu').value = window.appData.ozurlu || 0;
+
+            calculateStats();
+            renderScheduleView();
+            renderDashboard();
+            renderCalendar();
+        }
+
+        function getHolidayInfo(dateObj) {
+            const dStr = formatDateString(dateObj);
+            for (let h of mebHolidays) {
+                if (dStr >= h.start && dStr <= h.end) {
+                    return h.name;
+                }
+            }
+            return null;
+        }
+
+        function formatDateString(d) {
+            const year = d.getFullYear();
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+
+        function getDayType(dateObj) {
+            if (dateObj > schoolEndDate) return 'summer';
+            if (dateObj < new Date('2026-09-14')) return 'summer';
+
+            if (getHolidayInfo(dateObj)) return 'holiday';
+
+            const dayOfWeek = dateObj.getDay();
+            if (dayOfWeek === 0 || dayOfWeek === 6) return 'weekend';
+
+            const sched = window.appData.profile?.scheduleType || 'mon_tue';
+
+            if (sched === 'mon_tue') {
+                if (dayOfWeek === 1 || dayOfWeek === 2) return 'school';
+                return 'staj';
+            } else if (sched === 'thu_fri') {
+                if (dayOfWeek === 4 || dayOfWeek === 5) return 'school';
+                return 'staj';
+            } else {
+                return 'school';
+            }
+        }
+
+        function calculateStats() {
+            let today = new Date();
+            today.setHours(0,0,0,0);
+
+            let schoolCount = 0;
+            let stajCount = 0;
+            let iter = new Date(today);
+
+            while (iter <= schoolEndDate) {
+                const dtype = getDayType(iter);
+                if (dtype === 'school') schoolCount++;
+                if (dtype === 'staj') stajCount++;
+                iter.setDate(iter.getDate() + 1);
+            }
+
+            document.getElementById('stat-school-days').innerText = schoolCount;
+            document.getElementById('stat-staj-days').innerText = stajCount;
+
+            const sched = window.appData.profile?.scheduleType || 'mon_tue';
+            if (sched === 'mon_tue') {
+                document.getElementById('stat-school-days-sub').innerText = 'Pzt & Salı (Tatiller Hariç)';
+                document.getElementById('stat-staj-days-sub').innerText = 'Çar, Per, Cuma';
+            } else if (sched === 'thu_fri') {
+                document.getElementById('stat-school-days-sub').innerText = 'Per & Cuma (Tatiller Hariç)';
+                document.getElementById('stat-staj-days-sub').innerText = 'Pzt, Sal, Çarşamba';
+            } else {
+                document.getElementById('stat-school-days-sub').innerText = 'Tüm Hafta İçi';
+                document.getElementById('stat-staj-days-sub').innerText = 'Staj Yok';
+            }
+
+            // Countdown to school end
+            const diffTime = schoolEndDate - today;
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            document.getElementById('countdown-school-end').innerText = diffDays > 0 ? `${diffDays} Gün` : 'Tamamlandı';
+
+            // Find next upcoming holiday
+            let nextH = null;
+            for (let h of mebHolidays) {
+                let hDate = new Date(h.start);
+                if (hDate >= today) {
+                    nextH = h;
+                    break;
+                }
+            }
+
+            if (nextH) {
+                let hDate = new Date(nextH.start);
+                let hDiff = Math.ceil((hDate - today) / (1000 * 60 * 60 * 24));
+                document.getElementById('countdown-next-holiday').innerText = `${hDiff} Gün`;
+                document.getElementById('next-holiday-name').innerText = nextH.name;
+            } else {
+                document.getElementById('countdown-next-holiday').innerText = 'Tatil Yok';
+                document.getElementById('next-holiday-name').innerText = 'Yaz Tatili Dönemi';
+            }
+
+            // Today's status badge
+            const todayType = getDayType(today);
+            const badge = document.getElementById('today-status-badge');
+            if (todayType === 'school') {
+                badge.innerHTML = '<span class="text-blue-200">Bugün Okul Günü 📚</span>';
+            } else if (todayType === 'staj') {
+                badge.innerHTML = '<span class="text-purple-200">Bugün Staj Günü 💼</span>';
+            } else if (todayType === 'holiday') {
+                badge.innerHTML = '<span class="text-emerald-200">Resmi Tatil / Ara Tatil 🎉</span>';
+            } else {
+                badge.innerHTML = '<span class="text-amber-200">Hafta Sonu Tatili ☕</span>';
+            }
+
+            updateAttendanceUI();
+        }
+
+        // Attendance Actions
+        window.updateAttendanceData = function() {
+            window.appData.ozursuz = parseInt(document.getElementById('input-ozursuz').value) || 0;
+            window.appData.ozurlu = parseInt(document.getElementById('input-ozurlu').value) || 0;
+            if (window.appData.ozursuz > 10) window.appData.ozursuz = 10;
+            if (window.appData.ozurlu > 20) window.appData.ozurlu = 20;
+            
+            document.getElementById('input-ozursuz').value = window.appData.ozursuz;
+            document.getElementById('input-ozurlu').value = window.appData.ozurlu;
+
+            saveUserData();
+            updateAttendanceUI();
+        };
+
+        window.saveAttendanceSettings = function() {
+            window.updateAttendanceData();
+            showToast('Devamsızlık bilgileri kaydedildi!');
+        };
+
+        function updateAttendanceUI() {
+            const ozursuz = window.appData.ozursuz || 0;
+            const ozurlu = window.appData.ozurlu || 0;
+            const toplam = ozursuz + ozurlu;
+
+            document.getElementById('summary-ozursuz-text').innerText = `${ozursuz} / 10 Gün`;
+            document.getElementById('bar-ozursuz').style.width = `${(ozursuz / 10) * 100}%`;
+
+            document.getElementById('summary-ozurlu-text').innerText = `${ozurlu} / 20 Gün`;
+            document.getElementById('bar-ozurlu').style.width = `${(ozurlu / 20) * 100}%`;
+
+            document.getElementById('summary-toplam-text').innerText = `${toplam} / 30 Gün`;
+            document.getElementById('bar-toplam').style.width = `${(toplam / 30) * 100}%`;
+
+            document.getElementById('display-toplam-devamsizlik').innerText = `${toplam} / 30 Gün`;
+
+            const box = document.getElementById('attendance-warning-box');
+            const text = document.getElementById('attendance-warning-text');
+
+            if (ozursuz >= 8 || toplam >= 25) {
+                box.className = 'mt-6 p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-sm flex items-center gap-3';
+                box.querySelector('i').className = 'fa-solid fa-triangle-exclamation text-lg text-rose-600';
+                text.innerText = 'DİKKAT! Devamsızlık sınırına çok yaklaştınız. Sınıf tekrarı riski bulunmaktadır!';
+            } else if (ozursuz >= 5 || toplam >= 15) {
+                box.className = 'mt-6 p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm flex items-center gap-3';
+                box.querySelector('i').className = 'fa-solid fa-triangle-exclamation text-lg text-amber-600';
+                text.innerText = 'Uyarı: Özürsüz devamsızlıklarınız artıyor, dikkatli olmanızda fayda var.';
+            } else {
+                box.className = 'mt-6 p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm flex items-center gap-3';
+                box.querySelector('i').className = 'fa-solid fa-circle-check text-lg text-emerald-600';
+                text.innerText = 'Devamsızlık durumunuz çok iyi! Sınırların oldukça altındasınız.';
+            }
+        }
+
+        const monthNames = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
+
+        window.changeMonth = function(dir) {
+            window.currentDate.setMonth(window.currentDate.getMonth() + dir);
+            renderCalendar();
+        };
+
+        window.goToCurrentMonth = function() {
+            window.currentDate = new Date();
+            renderCalendar();
+        };
+
+        function renderCalendar() {
+            const year = window.currentDate.getFullYear();
+            const month = window.currentDate.getMonth();
+
+            document.getElementById('calendar-month-year').innerText = `${monthNames[month]} ${year}`;
+
+            const firstDayIndex = new Date(year, month, 1).getDay();
+            let startingDay = firstDayIndex === 0 ? 6 : firstDayIndex - 1;
+            const totalDays = new Date(year, month + 1, 0).getDate();
+
+            const grid = document.getElementById('calendar-grid');
+            grid.innerHTML = '';
+
+            for (let i = 0; i < startingDay; i++) {
+                const emptyDiv = document.createElement('div');
+                emptyDiv.className = 'h-24 bg-slate-50/50 rounded-xl border border-transparent';
+                grid.appendChild(emptyDiv);
+            }
+
+            const todayStr = formatDateString(new Date());
+
+            for (let day = 1; day <= totalDays; day++) {
+                const dObj = new Date(year, month, day);
+                const dStr = formatDateString(dObj);
+                const dtype = getDayType(dObj);
+                const holidayName = getHolidayInfo(dObj);
+                const dayEvents = (window.appData.events && window.appData.events[dStr]) || [];
+
+                const cell = document.createElement('div');
+                let cellClasses = 'h-24 p-2 rounded-xl border flex flex-col justify-between transition cursor-pointer relative overflow-hidden ';
+                
+                if (dStr === todayStr) {
+                    cellClasses += 'border-indigo-500 ring-2 ring-indigo-500/20 bg-indigo-50/30 ';
+                } else {
+                    cellClasses += 'border-slate-200 bg-white hover:border-slate-300 ';
+                }
+
+                cell.className = cellClasses;
+                cell.onclick = () => openDayModal(dStr, dObj, holidayName, dtype);
+
+                let badgeHtml = '';
+                if (holidayName) {
+                    badgeHtml = `<span class="text-[10px] bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded font-medium truncate">Tatil: ${holidayName}</span>`;
+                } else if (dtype === 'school') {
+                    badgeHtml = `<span class="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-medium">Okul Günü</span>`;
+                } else if (dtype === 'staj') {
+                    badgeHtml = `<span class="text-[10px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded font-medium">Staj Günü</span>`;
+                } else {
+                    badgeHtml = `<span class="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-medium">Tatil</span>`;
+                }
+
+                let eventsHtml = '';
+                if (dayEvents.length > 0) {
+                    eventsHtml = `<div class="space-y-1 mt-1">`;
+                    dayEvents.forEach(ev => {
+                        eventsHtml += `<div class="text-[10px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded truncate font-medium"><i class="fa-solid fa-thumbtack mr-1"></i>${ev}</div>`;
+                    });
+                    eventsHtml += `</div>`;
+                }
+
+                cell.innerHTML = `
+                    <div class="flex justify-between items-center">
+                        <span class="text-sm font-bold ${dStr === todayStr ? 'bg-indigo-600 text-white w-6 h-6 rounded-full flex items-center justify-center' : 'text-slate-700'}">${day}</span>
+                        ${holidayName ? '<i class="fa-solid fa-star text-rose-500 text-xs"></i>' : ''}
+                    </div>
+                    <div class="space-y-1">
+                        ${badgeHtml}
+                        ${eventsHtml}
+                    </div>
+                `;
+
+                grid.appendChild(cell);
+            }
+
+            renderDashboardEvents();
+        }
+
+        function renderScheduleView() {
+            const container = document.getElementById('schedule-list-container');
+            const sched = window.appData.profile?.scheduleType || 'mon_tue';
+
+            let items = [];
+            if (sched === 'mon_tue') {
+                items = [
+                    { day: 'Pazartesi (Okul)', status: 'Okul Günü', time: '10:30 - 18:25', bg: 'bg-blue-50 border-blue-100', text: 'text-blue-900', badge: 'bg-blue-200 text-blue-800' },
+                    { day: 'Salı (Okul)', status: 'Okul Günü', time: '08:00 - 18:25', bg: 'bg-blue-50 border-blue-100', text: 'text-blue-900', badge: 'bg-blue-200 text-blue-800' },
+                    { day: 'Çarşamba (Staj)', status: 'Staj Günü', time: '08:00 - 16:00', bg: 'bg-purple-50 border-purple-100', text: 'text-purple-900', badge: 'bg-purple-200 text-purple-800' },
+                    { day: 'Perşembe (Staj)', status: 'Staj Günü', time: '08:00 - 16:00', bg: 'bg-purple-50 border-purple-100', text: 'text-purple-900', badge: 'bg-purple-200 text-purple-800' },
+                    { day: 'Cuma (Staj)', status: 'Staj Günü', time: '08:00 - 16:00', bg: 'bg-purple-50 border-purple-100', text: 'text-purple-900', badge: 'bg-purple-200 text-purple-800' },
+                ];
+            } else if (sched === 'thu_fri') {
+                items = [
+                    { day: 'Pazartesi (Staj)', status: 'Staj Günü', time: '08:00 - 16:00', bg: 'bg-purple-50 border-purple-100', text: 'text-purple-900', badge: 'bg-purple-200 text-purple-800' },
+                    { day: 'Salı (Staj)', status: 'Staj Günü', time: '08:00 - 16:00', bg: 'bg-purple-50 border-purple-100', text: 'text-purple-900', badge: 'bg-purple-200 text-purple-800' },
+                    { day: 'Çarşamba (Staj)', status: 'Staj Günü', time: '08:00 - 16:00', bg: 'bg-purple-50 border-purple-100', text: 'text-purple-900', badge: 'bg-purple-200 text-purple-800' },
+                    { day: 'Perşembe (Okul)', status: 'Okul Günü', time: '08:00 - 18:25', bg: 'bg-blue-50 border-blue-100', text: 'text-blue-900', badge: 'bg-blue-200 text-blue-800' },
+                    { day: 'Cuma (Okul)', status: 'Okul Günü', time: '08:00 - 18:25', bg: 'bg-blue-50 border-blue-100', text: 'text-blue-900', badge: 'bg-blue-200 text-blue-800' },
+                ];
+            } else {
+                items = [
+                    { day: 'Pazartesi - Cuma (Okul)', status: 'Okul Günü', time: '08:00 - 16:00', bg: 'bg-blue-50 border-blue-100', text: 'text-blue-900', badge: 'bg-blue-200 text-blue-800' }
+                ];
+            }
+
+            let html = '';
+            items.forEach(item => {
+                html += `
+                    <div class="p-3.5 rounded-xl ${item.bg} border flex justify-between items-center">
+                        <div>
+                            <span class="font-bold ${item.text} block">${item.day}</span>
+                            <span class="text-xs text-slate-600">${item.time}</span>
+                        </div>
+                        <span class="${item.badge} text-xs px-2.5 py-1 rounded-full font-semibold">${item.status}</span>
+                    </div>
+                `;
+            });
+
+            html += `
+                <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex justify-between items-center text-slate-500">
+                    <div>
+                        <span class="font-bold block">Cumartesi & Pazar</span>
+                        <span class="text-xs">Hafta Sonu Tatili</span>
+                    </div>
+                    <span class="bg-slate-200 text-slate-700 text-xs px-2.5 py-1 rounded-full font-semibold">Tatil</span>
+                </div>
+            `;
+
+            container.innerHTML = html;
+        }
+
+        // Modal Actions for Calendar Notes
+        let selectedDateStr = null;
+
+        window.openDayModal = function(dStr, dObj, holidayName, dtype) {
+            selectedDateStr = dStr;
+            const modal = document.getElementById('day-modal');
+            const title = document.getElementById('modal-date-title');
+            const statusInfo = document.getElementById('modal-status-info');
+
+            title.innerText = `${dObj.getDate()} ${monthNames[dObj.getMonth()]} ${dObj.getFullYear()}`;
+
+            let statusText = '';
+            if (holidayName) {
+                statusText = `<strong class="text-rose-600">Resmi Tatil / Ara Tatil:</strong> ${holidayName}`;
+            } else if (dtype === 'school') {
+                statusText = `<strong class="text-blue-600">Okul Günü:</strong> Ders programına göre okuldasın.`;
+            } else if (dtype === 'staj') {
+                statusText = `<strong class="text-purple-600">Staj Günü:</strong> İşletmede Mesleki Eğitim.`;
+            } else {
+                statusText = `<strong class="text-slate-600">Hafta Sonu / Tatil:</strong> Okul veya staj yok.`;
+            }
+            statusInfo.innerHTML = statusText;
+
+            renderModalEvents();
+            document.getElementById('modal-event-input').value = '';
+            modal.classList.remove('hidden');
+        };
+
+        window.closeDayModal = function() {
+            document.getElementById('day-modal').classList.add('hidden');
+            renderCalendar();
+            renderDashboardEvents();
+        };
+
+        window.saveDayEvent = async function() {
+            const input = document.getElementById('modal-event-input');
+            const val = input.value.trim();
+            if (!val) return;
+
+            if (!window.appData.events) window.appData.events = {};
+            if (!window.appData.events[selectedDateStr]) {
+                window.appData.events[selectedDateStr] = [];
+            }
+            window.appData.events[selectedDateStr].push(val);
+            
+            await saveUserData();
+            input.value = '';
+            renderModalEvents();
+            showToast('Etkinlik eklendi!');
+        };
+
+        window.deleteDayEvent = async function(index) {
+            if (window.appData.events && window.appData.events[selectedDateStr]) {
+                window.appData.events[selectedDateStr].splice(index, 1);
+                if (window.appData.events[selectedDateStr].length === 0) {
+                    delete window.appData.events[selectedDateStr];
+                }
+                await saveUserData();
+                renderModalEvents();
+                showToast('Etkinlik silindi.');
+            }
+        };
+
+        function renderModalEvents() {
+            const container = document.getElementById('modal-events-container');
+            const events = (window.appData.events && window.appData.events[selectedDateStr]) || [];
+
+            if (events.length === 0) {
+                container.innerHTML = '<p class="text-xs text-slate-400 italic">Bu güne ait kayıtlı etkinlik yok.</p>';
+                return;
+            }
+
+            let html = '';
+            events.forEach((ev, idx) => {
+                html += `
+                    <div class="flex items-center justify-between bg-slate-50 border border-slate-200 px-3 py-2 rounded-lg text-xs">
+                        <span class="font-medium text-slate-700"><i class="fa-solid fa-thumbtack text-indigo-500 mr-2"></i>${ev}</span>
+                        <button onclick="deleteDayEvent(${idx})" class="text-rose-500 hover:text-rose-700"><i class="fa-solid fa-trash-can"></i></button>
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
+        }
+
+        function renderDashboardEvents() {
+            const listEl = document.getElementById('dashboard-events-list');
+            const badgeEl = document.getElementById('event-count-badge');
+
+            let allEvents = [];
+            if (window.appData.events) {
+                Object.keys(window.appData.events).forEach(dStr => {
+                    window.appData.events[dStr].forEach(ev => {
+                        allEvents.push({ date: dStr, text: ev });
+                    });
+                });
+            }
+
+            allEvents.sort((a, b) => a.date.localeCompare(b.date));
+            badgeEl.innerText = `${allEvents.length} Etkinlik`;
+
+            if (allEvents.length === 0) {
+                listEl.innerHTML = `
+                    <div class="text-center py-8 text-slate-400 text-sm">
+                        <i class="fa-regular fa-calendar-xmark text-3xl mb-2 block"></i>
+                        Kayıtlı etkinlik veya not bulunmuyor.<br>Takvimden gün seçerek ekleyebilirsin.
+                    </div>
+                `;
+                return;
+            }
+
+            let html = '';
+            allEvents.forEach(item => {
+                let parts = item.date.split('-');
+                let formattedDate = `${parts[2]}.${parts[1]}.${parts[0]}`;
+                html += `
+                    <div class="p-3 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-between text-sm">
+                        <div>
+                            <div class="text-xs font-semibold text-indigo-600 mb-0.5">${formattedDate}</div>
+                            <div class="text-slate-800 font-medium">${item.text}</div>
+                        </div>
+                    </div>
+                `;
+            });
+            listEl.innerHTML = html;
+        }
+
+        window.switchTab = function(tabId) {
+            window.currentTab = tabId;
+            ['dashboard', 'calendar', 'attendance', 'schedule'].forEach(t => {
+                const el = document.getElementById(`view-${t}`);
+                const nav = document.getElementById(`nav-${t}`);
+                if (t === tabId) {
+                    el.classList.remove('hidden');
+                    if(nav) {
+                        nav.className = "px-3 py-1.5 rounded-lg text-sm font-medium bg-indigo-700 text-white transition flex items-center gap-1.5";
+                    }
+                } else {
+                    el.classList.add('hidden');
+                    if(nav) {
+                        nav.className = "px-3 py-1.5 rounded-lg text-sm font-medium text-indigo-100 hover:bg-indigo-500 transition flex items-center gap-1.5";
+                    }
+                }
+            });
+
+            if (tabId === 'calendar') {
+                renderCalendar();
+            } else if (tabId === 'dashboard') {
+                renderDashboard();
+            }
+        };
+
+        window.renderDashboard = function() {
+            calculateStats();
+            renderDashboardEvents();
+        };
+
+        // UI Helpers (Toast & Loading)
+        function showLoading(text = "Yükleniyor...") {
+            document.getElementById('loading-text').innerText = text;
+            document.getElementById('app-loading').classList.remove('hidden');
+        }
+
+        function hideLoading() {
+            document.getElementById('app-loading').classList.add('hidden');
+        }
+
+        window.showToast = function(msg, type = 'success') {
+            const toast = document.getElementById('toast');
+            const icon = document.getElementById('toast-icon');
+            
+            document.getElementById('toast-message').innerText = msg;
+            if (type === 'error') {
+                icon.className = 'fa-solid fa-circle-xmark text-rose-400 text-lg';
+            } else {
+                icon.className = 'fa-solid fa-circle-check text-emerald-400 text-lg';
+            }
+
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            setTimeout(() => {
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 3500);
+        };
+    </script>
+</body>
+</html>
