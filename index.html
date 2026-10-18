@@ -554,14 +554,14 @@
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'student-tracker-app';
         
         // Görseldeki kendi Firebase konfigürasyon bilgilerin buraya eklendi:
-        const firebaseConfig = {
-            apiKey: "AIzaSyCzRzbnjnRauAwtNeGqJLFN6RYuMWrEg",
-            authDomain: "okul-staj.firebaseapp.com",
-            projectId: "okul-staj",
-            storageBucket: "okul-staj.firebasestorage.app",
-            messagingSenderId: "795278972533",
-            appId: "1:795278972533:web:d43618bd40ac9321fe0a3c"
-        };
+const firebaseConfig = {
+  apiKey: "AIzaSyCzZRzbnjnRauAwtNeGqGJLFN6RYuMWrEg",
+  authDomain: "okul-staj.firebaseapp.com",
+  projectId: "okul-staj",
+  storageBucket: "okul-staj.firebasestorage.app",
+  messagingSenderId: "795278972533",
+  appId: "1:795278972533:web:d43618bd40ac9321fe0a3c"
+};
 
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
